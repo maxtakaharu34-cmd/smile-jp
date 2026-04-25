@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#ffeef5" />
+<title>笑顔メーター</title>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+P+One&family=Kosugi+Maru&display=swap" rel="stylesheet"/>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+body {
+  font-family: "Kosugi Maru", system-ui, sans-serif;
+  color: #3a1d33;
+  background:
+    radial-gradient(800px 500px at 30% 10%, rgba(255,150,200,0.4), transparent 70%),
+    radial-gradient(800px 500px at 70% 90%, rgba(255,220,150,0.4), transparent 70%),
+    linear-gradient(180deg, #ffeef5, #fff5e0);
+  touch-action: manipulation; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#app {
+  display: flex; flex-direction: column;
+  height: 100dvh; padding: 10px 14px; gap: 10px;
+  max-width: 480px; margin: 0 auto;
+}
+header { display: flex; justify-content: space-between; align-items: center; }
+.title {
+  font-family: "Mochiy Pop P One", sans-serif;
+  font-size: 22px; color: #ff5fa2;
+  -webkit-text-stroke: 2.5px #fff; paint-order: stroke fill;
+  text-shadow: 3px 3px 0 #3a1d33, 5px 5px 0 #ffd56b;
+  margin: 0; transform: rotate(-2deg);
+}
+.icon-btn {
+  background: #fff; border: 2.5px solid #3a1d33;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 13px; font-weight: 900; cursor: pointer;
+  box-shadow: 2px 2px 0 #3a1d33;
+}
+
+.cam-wrap {
+  position: relative; flex: 1 1 auto;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0; overflow: hidden;
+  border: 4px solid #3a1d33; border-radius: 18px;
+  background: #1a0a14;
+  box-shadow: 4px 4px 0 #3a1d33;
+}
+video, canvas#face {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror */
+}
+canvas#face { pointer-events: none; }
+.no-cam {
+  text-align: center; color: #fff; font-size: 12px;
+  padding: 24px;
+  position: relative; z-index: 5;
+  font-family: "Kosugi Maru", sans-serif;
+}
+
+/* Big score ring overlaid on video */
+.score-ring {
+  position: absolute; top: 14px; right: 14px;
+  width: 96px; height: 96px; z-index: 6;
+  pointer-events: none;
+}
+.score-ring svg { width: 100%; height: 100%; }
+.score-ring .ring-bg { stroke: rgba(255,255,255,0.2); }
+.score-ring .ring-fg { stroke: #ff5fa2; transition: stroke-dashoffset 0.18s, stroke 0.18s; }
+.score-ring .ring-text {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-family: "Mochiy Pop P One", sans-serif;
+  text-shadow: 0 0 8px rgba(0,0,0,0.7), 2px 2px 0 #000;
+}
+.score-ring .ring-text .v { font-size: 28px; line-height: 1; }
+.score-ring .ring-text .l { font-size: 9px; letter-spacing: 0.1em; opacity: 0.85; }
+
+.label-tag {
+  position: absolute; bottom: 14px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.95);
+  border: 3px solid #3a1d33; border-radius: 999px;
+  padding: 8px 18px;
+  font-family: "Mochiy Pop P One", sans-serif;
+  font-size: 16px; color: #3a1d33;
+  box-shadow: 3px 3px 0 #3a1d33;
+  z-index: 6;
+  white-space: nowrap;
+}
+
+.bottom {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.bottom button {
+  background: #fff; border: 3px solid #3a1d33;
+  padding: 12px;
+  font-family: "Mochiy Pop P One", sans-serif; font-size: 14px;
+  border-radius: 14px; cursor: pointer;
+  box-shadow: 3px 3px 0 #3a1d33;
+}
+.bottom button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #3a1d33; }
+.bottom .primary { background: #ff5fa2; color: #fff; }
+
+.note { font-size: 10px; opacity: 0.65; text-align: center; line-height: 1.5; }
+
+/* Result modal */
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+  z-index: 100;
+}
+.modal.show { display: flex; }
+.modal .box {
+  background: #fff; border: 4px solid #3a1d33; border-radius: 16px;
+  padding: 20px; text-align: center; max-width: 360px; width: 100%;
+  box-shadow: 6px 6px 0 #3a1d33;
+}
+.modal h2 {
+  margin: 0 0 10px;
+  font-family: "Mochiy Pop P One", sans-serif;
+  font-size: 22px; color: #ff5fa2;
+  -webkit-text-stroke: 2px #fff; paint-order: stroke fill;
+  text-shadow: 2px 2px 0 #3a1d33;
+}
+.modal .big-score {
+  font-family: "Mochiy Pop P One", sans-serif;
+  font-size: 64px; line-height: 1;
+  color: #ff5fa2;
+  -webkit-text-stroke: 3px #3a1d33; paint-order: stroke fill;
+  text-shadow: 4px 4px 0 #ffd56b;
+  margin: 8px 0;
+}
+.modal .big-score .pt { font-size: 20px; opacity: 0.7; }
+.modal .verdict {
+  font-family: "Mochiy Pop P One", sans-serif;
+  font-size: 16px; margin: 6px 0 12px;
+}
+.modal img.shot {
+  width: 100%; aspect-ratio: 1;
+  object-fit: cover;
+  border: 3px solid #3a1d33;
+  border-radius: 12px;
+  margin: 6px 0;
+}
+.modal .actions {
+  display: flex; gap: 6px; justify-content: center; margin-top: 8px;
+}
+.modal .actions button {
+  background: #fff; border: 2.5px solid #3a1d33;
+  padding: 8px 14px;
+  font-family: "Mochiy Pop P One", sans-serif; font-size: 13px;
+  border-radius: 999px; cursor: pointer;
+  box-shadow: 2px 2px 0 #3a1d33;
+}
+.modal .actions .primary { background: #1da1f2; color: #fff; }
+.modal .actions .secondary { background: #ff5fa2; color: #fff; }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translate(-50%, 30px);
+  background: #3a1d33; color: #fff;
+  padding: 8px 16px; border-radius: 999px;
+  font-size: 12px; opacity: 0; transition: 0.25s;
+  z-index: 200;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 class="title">笑顔メーター</h1>
+    <div style="display:flex; gap:5px;">
+      <button class="icon-btn" id="btn-flip">📷 切替</button>
+    </div>
+  </header>
+
+  <div class="cam-wrap" id="cam-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="face"></canvas>
+    <div class="score-ring" id="ring">
+      <svg viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="44" fill="none" stroke-width="8"/>
+        <circle class="ring-fg" id="ring-fg" cx="50" cy="50" r="44" fill="none" stroke-width="8"
+          stroke-linecap="round" stroke-dasharray="276.46" stroke-dashoffset="276.46"
+          transform="rotate(-90 50 50)"/>
+      </svg>
+      <div class="ring-text">
+        <div class="v" id="ring-val">--</div>
+        <div class="l">SMILE</div>
+      </div>
+    </div>
+    <div class="label-tag" id="label">カメラ準備中…</div>
+    <div class="no-cam" id="no-cam" style="display:none;">
+      🙂 カメラの利用許可をしてください<br/>
+      ボタンを押すとカメラが起動します
+    </div>
+  </div>
+
+  <div class="bottom">
+    <button id="btn-start">📸 カメラを開始</button>
+    <button class="primary" id="btn-snap" disabled>✨ スコアを記録</button>
+  </div>
+  <div class="note">
+    顔・笑顔データはこの端末内だけで処理されます。サーバー送信なし。
+  </div>
+</div>
+
+<div class="modal" id="result">
+  <div class="box">
+    <h2 id="r-title">結果</h2>
+    <img class="shot" id="r-shot" alt=""/>
+    <div class="big-score"><span id="r-score">0</span><span class="pt"> 点</span></div>
+    <div class="verdict" id="r-verdict">—</div>
+    <div class="actions">
+      <button class="secondary" id="r-retry">もう一回</button>
+      <button class="primary" id="r-share">🔗 シェア</button>
+      <button id="r-download">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs';
+
+const SHARE_URL = 'https://maxtakaharu34-cmd.github.io/smile-jp/';
+const $ = (id) => document.getElementById(id);
+const video = $('video');
+const faceCanvas = $('face');
+const faceCtx = faceCanvas.getContext('2d');
+const ringFg = $('ring-fg');
+const ringVal = $('ring-val');
+const labelEl = $('label');
+const btnStart = $('btn-start');
+const btnSnap = $('btn-snap');
+const btnFlip = $('btn-flip');
+const toast = $('toast');
+const RING_C = 2 * Math.PI * 44; // ~276.46
+
+let faceLandmarker = null;
+let stream = null;
+let running = false;
+let facing = 'user'; // 'user' | 'environment'
+let lastScore = 0;
+let bestScore = 0;
+let lastDetectionTime = 0;
+
+function showToast(text) {
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+async function loadModel() {
+  if (faceLandmarker) return;
+  labelEl.textContent = 'AIモデル読込中…';
+  const fileset = await FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+  );
+  faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      delegate: 'GPU'
+    },
+    outputFaceBlendshapes: true,
+    runningMode: 'VIDEO',
+    numFaces: 1
+  });
+}
+
+async function startCamera() {
+  try {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    labelEl.textContent = 'カメラ起動中…';
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 640 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await new Promise((r) => video.onloadedmetadata = r);
+    await video.play();
+    await loadModel();
+    running = true;
+    btnSnap.disabled = false;
+    btnStart.textContent = '🛑 カメラ停止';
+    labelEl.textContent = 'にっこり…！';
+    requestAnimationFrame(loop);
+  } catch (err) {
+    console.error(err);
+    labelEl.textContent = 'カメラ取得失敗';
+    showToast('カメラの許可が必要です');
+  }
+}
+
+function stopCamera() {
+  running = false;
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+  btnSnap.disabled = true;
+  btnStart.textContent = '📸 カメラを開始';
+  labelEl.textContent = 'カメラ停止中';
+  ringVal.textContent = '--';
+  ringFg.style.strokeDashoffset = RING_C;
+}
+
+function getBlend(blends, name) {
+  const c = blends.find((b) => b.categoryName === name);
+  return c ? c.score : 0;
+}
+
+function calcScore(blendshapes) {
+  // Smile-related categories from MediaPipe blendshapes
+  const sL = getBlend(blendshapes, 'mouthSmileLeft');
+  const sR = getBlend(blendshapes, 'mouthSmileRight');
+  const cL = getBlend(blendshapes, 'cheekSquintLeft');
+  const cR = getBlend(blendshapes, 'cheekSquintRight');
+  const eL = getBlend(blendshapes, 'eyeSquintLeft');
+  const eR = getBlend(blendshapes, 'eyeSquintRight');
+  // Penalty: jaw open (often skews score in some libs) — minor
+  const smile = (sL + sR) / 2;
+  const cheek = (cL + cR) / 2;
+  const eye = (eL + eR) / 2;
+  // Weighting tuned so a confident smile lands around 90+
+  const raw = smile * 0.65 + cheek * 0.15 + eye * 0.20;
+  return Math.max(0, Math.min(100, Math.round(raw * 145)));
+}
+
+function verdict(score) {
+  if (score >= 90) return { txt: 'パーフェクト笑顔！✨', color: '#ff5fa2' };
+  if (score >= 75) return { txt: '最高の笑顔😆', color: '#ff7a3a' };
+  if (score >= 60) return { txt: 'いい笑顔😊', color: '#ffb84d' };
+  if (score >= 40) return { txt: 'もう少し！🙂', color: '#5aa9ff' };
+  if (score >= 20) return { txt: '真顔気味…😐', color: '#888' };
+  return { txt: '無表情…💀', color: '#555' };
+}
+
+function drawLandmarks(landmarks, vw, vh) {
+  faceCanvas.width = vw; faceCanvas.height = vh;
+  faceCtx.clearRect(0, 0, vw, vh);
+  if (!landmarks) return;
+  // draw lips outline only (~indices for mouth contour) — lightweight
+  const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,61];
+  faceCtx.strokeStyle = '#ff5fa2';
+  faceCtx.lineWidth = 3;
+  faceCtx.beginPath();
+  for (let i = 0; i < MOUTH.length; i++) {
+    const p = landmarks[MOUTH[i]];
+    if (!p) continue;
+    const x = p.x * vw, y = p.y * vh;
+    if (i === 0) faceCtx.moveTo(x, y); else faceCtx.lineTo(x, y);
+  }
+  faceCtx.stroke();
+}
+
+function loop() {
+  if (!running) return;
+  if (video.readyState >= 2 && faceLandmarker) {
+    const ts = performance.now();
+    if (ts - lastDetectionTime > 80) {
+      lastDetectionTime = ts;
+      try {
+        const res = faceLandmarker.detectForVideo(video, ts);
+        const lm = res.faceLandmarks?.[0];
+        const bs = res.faceBlendshapes?.[0]?.categories;
+        drawLandmarks(lm, video.videoWidth, video.videoHeight);
+        if (bs) {
+          lastScore = calcScore(bs);
+          if (lastScore > bestScore) bestScore = lastScore;
+          ringVal.textContent = lastScore;
+          const v = verdict(lastScore);
+          labelEl.textContent = v.txt;
+          ringFg.style.stroke = v.color;
+          ringFg.style.strokeDashoffset = RING_C * (1 - lastScore / 100);
+        } else {
+          labelEl.textContent = '顔が見つかりません…';
+          ringVal.textContent = '--';
+          ringFg.style.strokeDashoffset = RING_C;
+        }
+      } catch (err) {
+        // ignore one-off detection errors
+      }
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function snap() {
+  if (!running) return;
+  // Capture current frame to a dataURL (mirror so saved image matches what user sees)
+  const c = document.createElement('canvas');
+  const size = Math.min(video.videoWidth, video.videoHeight);
+  c.width = size; c.height = size;
+  const cc = c.getContext('2d');
+  // draw centered crop (square)
+  const sx = (video.videoWidth - size) / 2, sy = (video.videoHeight - size) / 2;
+  cc.translate(size, 0); cc.scale(-1, 1); // mirror
+  cc.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+  const url = c.toDataURL('image/png');
+  $('r-shot').src = url;
+  $('r-score').textContent = lastScore;
+  const v = verdict(lastScore);
+  $('r-verdict').textContent = v.txt;
+  $('r-verdict').style.color = v.color;
+  $('r-title').textContent = `${lastScore} 点！`;
+  $('result').classList.add('show');
+}
+
+$('btn-start').addEventListener('click', () => {
+  if (running) stopCamera();
+  else startCamera();
+});
+btnSnap.addEventListener('click', snap);
+btnFlip.addEventListener('click', () => {
+  facing = facing === 'user' ? 'environment' : 'user';
+  if (running) startCamera();
+  else showToast(`次回起動: ${facing === 'user' ? 'インカメラ' : '外カメラ'}`);
+});
+
+$('r-retry').addEventListener('click', () => $('result').classList.remove('show'));
+$('result').addEventListener('click', (e) => {
+  if (e.target === $('result')) $('result').classList.remove('show');
+});
+$('r-share').addEventListener('click', () => {
+  const txt = `わたしの笑顔は ${lastScore}点！${verdict(lastScore).txt} #笑顔メーター`;
+  const url = `https://x.com/intent/post?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(SHARE_URL)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+});
+$('r-download').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = $('r-shot').src;
+  a.download = `smile-${lastScore}pt.png`;
+  a.click();
+});
+</script>
+</body>
+</html>
